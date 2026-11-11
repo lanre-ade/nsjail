@@ -524,9 +524,11 @@ bool flush_to_host(Context* ctx, TcpFlow* flow) {
 			flow->rx_sent_offset = 0;
 		}
 
-		/* We made progress, remove EPOLLOUT if empty */
-		if (flow->c_tcp_rx_len == 0 && flow->epoll_out_registered) {
-			flow->epoll_out_registered = false;
+		/* Keep EPOLLOUT armed while data is pending: after a partial write
+		 * nothing else flushes the tail once the guest stops sending. */
+		bool pending = flow->c_tcp_rx_len > 0;
+		if (pending != flow->epoll_out_registered) {
+			flow->epoll_out_registered = pending;
 			if (!tcp_update_host_mask(flow)) {
 				PLOG_E("tcp_update_host_mask() failed");
 				tcp_rst_and_destroy(ctx, flow);
